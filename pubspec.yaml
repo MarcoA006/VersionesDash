@@ -1,0 +1,28 @@
+name: acc_admin
+description: Panel de administración de escritorio (vendedores, clientes, inventario, killswitch).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.5+1
+  http: ^1.6.0
+  bcrypt: ^1.2.0
+  excel: ^4.0.6
+  file_picker: ^11.0.2
+  flutter_map: ^8.3.0
+  latlong2: ^0.9.1
+  flutter_test:
+    sdk: flutter
+  supabase_flutter: ^2.14.2
+  fl_chart: ^1.2.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
