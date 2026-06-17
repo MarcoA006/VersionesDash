@@ -1,5 +1,6 @@
 import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/material.dart';
+import '../updater.dart';
 import 'package:provider/provider.dart';
 import '../admin_state.dart';
 import '../theme.dart';
@@ -19,6 +20,14 @@ class _LoginAdminScreenState extends State<LoginAdminScreen> {
   bool _validando = false;
   bool _pidiendoMfa = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AutoUpdater.checkForUpdates(context);
+    });
+  }
 
   Future<void> _entrar() async {
     setState(() {
