@@ -862,6 +862,24 @@ class MockAdminBackend implements AdminBackend {
   Future<void> altaChips(List<Chip> nuevos) => _delay(_chips.addAll(nuevos));
 
   @override
+  Future<void> eliminarChips(List<String> iccids) async {
+    _chips.removeWhere((c) => iccids.contains(c.iccid));
+    return _delay(null);
+  }
+
+  @override
+  Future<void> editarChipsMasivo(List<String> iccids, Map<String, dynamic> campos) async {
+    for (var c in _chips) {
+      if (iccids.contains(c.iccid)) {
+        if (campos.containsKey('estado')) c.estado = campos['estado'];
+        if (campos.containsKey('compania')) c.compania = campos['compania'];
+        if (campos.containsKey('vendedor_id')) c.vendedorId = campos['vendedor_id'];
+      }
+    }
+    return _delay(null);
+  }
+
+  @override
   Future<void> setConfig(String clave, String valor) =>
       _delay(_config[clave] = valor);
 
