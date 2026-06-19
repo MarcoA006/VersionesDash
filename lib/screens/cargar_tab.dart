@@ -92,12 +92,21 @@ class _CargarTabState extends State<CargarTab> {
       final hoja = libro.tables.values.first;
       final filas = hoja.rows;
 
-      // Encabezado en la fila índice 2 (fila 3 visible).
-      if (filas.length <= 3) {
-        _fin("El archivo no tiene filas de datos (encabezado en fila 3).");
+      // Auto-detectar la fila de encabezado buscando la que contenga "iccid"
+      int headerIdx = -1;
+      for (int i = 0; i < filas.length && i < 10; i++) {
+        final row = filas[i].map((c) => _norm(_cell(c))).toList();
+        if (row.any((c) => c.contains('iccid') || c.contains('icc'))) {
+          headerIdx = i;
+          break;
+        }
+      }
+      if (headerIdx == -1) {
+        _fin("No encuentro la fila de encabezado (debe contener la columna ICCID).");
         return;
       }
-      final encab = filas[2].map((c) => _norm(_cell(c))).toList();
+      final encab = filas[headerIdx].map((c) => _norm(_cell(c))).toList();
+      final dataStart = headerIdx + 1;
       int col(String nombre) => encab.indexOf(_norm(nombre));
 
       // Mapa nombre_vendedor -> vendedor_id, para resolver referencias.
@@ -131,7 +140,7 @@ class _CargarTabState extends State<CargarTab> {
           _fin("No encuentro las columnas esperadas (fecha, vendedor, producto).");
           return;
         }
-        for (var i = 3; i < filas.length; i++) {
+        for (var i = dataStart; i < filas.length; i++) {
           final r = filas[i];
           final vendNombre = _cell(r[cVend]).trim();
           if (vendNombre.isEmpty || vendNombre.toLowerCase() == "vendedor") continue;
@@ -177,12 +186,18 @@ class _CargarTabState extends State<CargarTab> {
             cIcc = col("iccid"),
             cDn = col("dn"),
             cLada = col("lada"),
-            cCarrierVend = col("carrier") != -1 ? col("carrier") : col("compañía");
+            cCarrierVend = col("carrier") != -1
+                ? col("carrier")
+                : col("compañia") != -1
+                    ? col("compañia")
+                    : col("compañía") != -1
+                        ? col("compañía")
+                        : col("compania");
         if ([cIcc, cVend].contains(-1)) {
           _fin("No encuentro las columnas esperadas (iccid, vendedor).");
           return;
         }
-        for (var i = 3; i < filas.length; i++) {
+        for (var i = dataStart; i < filas.length; i++) {
           final r = filas[i];
           final iccRaw = _cell(r[cIcc]).trim();
           if (iccRaw.isEmpty || iccRaw.toLowerCase() == "iccid" || iccRaw.toLowerCase() == "icc") continue;
@@ -193,7 +208,10 @@ class _CargarTabState extends State<CargarTab> {
           final vendNombre = _cell(r[cVend]).trim();
           final vid = idPorNombre[_norm(vendNombre)] ?? "";
           final carrierVend = cCarrierVend >= 0 ? _cell(r[cCarrierVend]).trim() : '';
-          final compDetectada = _comp(prod, carrier: carrierVend);
+          // Si no hay producto, usar directamente el carrier/compañía como compania
+          final compDetectada = prod.isNotEmpty
+              ? _comp(prod, carrier: carrierVend)
+              : (carrierVend.isNotEmpty ? carrierVend : 'Por definir');
           final fila = <String, dynamic>{
             "iccid": icc,
             "producto": prod,
@@ -229,7 +247,7 @@ class _CargarTabState extends State<CargarTab> {
           _fin("No encuentro las columnas esperadas (iccid, cliente).");
           return;
         }
-        for (var i = 3; i < filas.length; i++) {
+        for (var i = dataStart; i < filas.length; i++) {
           final r = filas[i];
           final iccRaw = _cell(r[cIcc]).trim();
           if (iccRaw.isEmpty || iccRaw.toLowerCase() == "iccid" || iccRaw.toLowerCase() == "icc") continue;
