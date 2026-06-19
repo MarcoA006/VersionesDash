@@ -77,6 +77,8 @@ class _VerInventarioState extends State<_VerInventario> {
   Set<String> _ladasSel = {};
   Set<String> _clientesSel = {};
   Set<String> _companiasSel = {};
+  Set<String> _seleccionados = {};
+  DateTimeRange? _rangoFechas;
 
   static const _companiasDisponibles = ["AT&T", "Unefon", "Telcel", "Movistar", "Bait"];
 
@@ -123,6 +125,11 @@ class _VerInventarioState extends State<_VerInventario> {
       } else {
         // Por defecto no mostrar vendidos
         if (c.estado == 'vendido') return false;
+      }
+      if (_rangoFechas != null) {
+        if (c.fechaAlta == null) return false;
+        if (c.fechaAlta!.isBefore(_rangoFechas!.start)) return false;
+        if (c.fechaAlta!.isAfter(_rangoFechas!.end.add(const Duration(days: 1)))) return false;
       }
       final t = "${c.iccid} ${c.dn} ${c.producto} ${c.estado}".toLowerCase();
       
@@ -272,6 +279,20 @@ class _VerInventarioState extends State<_VerInventario> {
               ),
               const SizedBox(width: 16),
               OutlinedButton.icon(
+                onPressed: () async {
+                  final res = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    initialDateRange: _rangoFechas,
+                  );
+                  if (res != null) setState(() => _rangoFechas = res);
+                },
+                icon: const Icon(Icons.date_range, size: 18),
+                label: Text(_rangoFechas == null ? "Filtrar por fecha" : "Fechas (Activo)"),
+              ),
+              const SizedBox(width: 16),
+              OutlinedButton.icon(
                 onPressed: () {
                   _filtroCtrl.clear();
                   setState(() {
@@ -281,6 +302,8 @@ class _VerInventarioState extends State<_VerInventario> {
                     _ladasSel.clear();
                     _clientesSel.clear();
                     _companiasSel.clear();
+                    _rangoFechas = null;
+                    _seleccionados.clear();
                   });
                 },
                 icon: const Icon(Icons.clear_all, size: 18),
@@ -295,12 +318,48 @@ class _VerInventarioState extends State<_VerInventario> {
           Expanded(
             child: Column(
               children: [
+                if (_seleccionados.isNotEmpty)
+                  Container(
+                    color: AppColors.amarillo.withValues(alpha: 0.2),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        Text("${_seleccionados.length} seleccionados", style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        ElevatedButton.icon(
+                          onPressed: _editarSeleccionados,
+                          icon: const Icon(Icons.edit),
+                          label: const Text("Editar seleccionados"),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.alerta),
+                          onPressed: _eliminarSeleccionados,
+                          icon: const Icon(Icons.delete),
+                          label: const Text("Eliminar definitivamente"),
+                        ),
+                      ],
+                    ),
+                  ),
                 Container(
                   color: AppColors.acento.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: const Row(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                  child: Row(
                     children: [
-                      SizedBox(width: 210, child: Text("ICCID", style: TextStyle(fontWeight: FontWeight.bold))),
+                      Checkbox(
+                        value: lista.isNotEmpty && _seleccionados.length == lista.length,
+                        tristate: _seleccionados.isNotEmpty && _seleccionados.length < lista.length,
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              _seleccionados = lista.map((c) => c.iccid).toSet();
+                            } else {
+                              _seleccionados.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 170, child: Text("ICCID", style: TextStyle(fontWeight: FontWeight.bold))),
                       SizedBox(width: 160, child: Text("DN / Producto", style: TextStyle(fontWeight: FontWeight.bold))),
                       SizedBox(width: 80, child: Text("Compañía", style: TextStyle(fontWeight: FontWeight.bold))),
                       SizedBox(width: 200, child: Text("Ubicación", style: TextStyle(fontWeight: FontWeight.bold))),
@@ -339,10 +398,19 @@ class _VerInventarioState extends State<_VerInventario> {
                       }
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                         child: Row(
                           children: [
-                            SizedBox(width: 210, child: Text(c.iccid, style: const TextStyle(fontFamily: "monospace", fontSize: 13))),
+                            Checkbox(
+                              value: _seleccionados.contains(c.iccid),
+                              onChanged: (v) {
+                                setState(() {
+                                  if (v == true) _seleccionados.add(c.iccid);
+                                  else _seleccionados.remove(c.iccid);
+                                });
+                              },
+                            ),
+                            SizedBox(width: 170, child: Text(c.iccid, style: const TextStyle(fontFamily: "monospace", fontSize: 13))),
                             SizedBox(width: 160, child: Text("${c.dn}\n${c.producto}", style: const TextStyle(fontSize: 12))),
                             SizedBox(width: 80, child: Align(alignment: Alignment.centerLeft, child: _badge(c.compania))),
                             SizedBox(
@@ -413,6 +481,61 @@ class _VerInventarioState extends State<_VerInventario> {
       fontColorHex: fontHex != null ? xls.ExcelColor.fromHexString(fontHex) : xls.ExcelColor.none,
       bold: bold,
     );
+  }
+
+  Future<void> _eliminarSeleccionados() async {
+    final state = context.read<AdminState>();
+    final conf = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Eliminar chips"),
+        content: Text("¿Seguro que deseas eliminar definitivamente los ${_seleccionados.length} chips seleccionados?\nEsta acción no se puede deshacer."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.alerta),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Eliminar"),
+          ),
+        ],
+      ),
+    );
+    if (conf != true) return;
+
+    try {
+      await state.backend.eliminarChips(_seleccionados.toList());
+      setState(() => _seleccionados.clear());
+      await state.recargarTodo();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chips eliminados correctamente.")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al eliminar: $e")));
+      }
+    }
+  }
+
+  Future<void> _editarSeleccionados() async {
+    final state = context.read<AdminState>();
+    final campos = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _DialogoEditarChipsMasivo(vendedores: state.vendedores),
+    );
+    if (campos == null || campos.isEmpty) return;
+
+    try {
+      await state.backend.editarChipsMasivo(_seleccionados.toList(), campos);
+      setState(() => _seleccionados.clear());
+      await state.recargarTodo();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chips actualizados.")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al actualizar: $e")));
+      }
+    }
   }
 
   Future<void> _exportarInventario(List<Chip> lista, AdminState state) async {
@@ -887,6 +1010,119 @@ class _AsignarNuevoState extends State<_AsignarNuevo> {
         alignLabelWithHint: true,
         border: const OutlineInputBorder(),
       ),
+    );
+  }
+}
+
+class _DialogoEditarChipsMasivo extends StatefulWidget {
+  final List<Vendedor> vendedores;
+  const _DialogoEditarChipsMasivo({required this.vendedores});
+
+  @override
+  State<_DialogoEditarChipsMasivo> createState() => _DialogoEditarChipsMasivoState();
+}
+
+class _DialogoEditarChipsMasivoState extends State<_DialogoEditarChipsMasivo> {
+  bool _cambiarVendedor = false;
+  String? _vendedorId;
+
+  bool _cambiarEstado = false;
+  String _estado = 'en_vendedor';
+
+  bool _cambiarCompania = false;
+  String _compania = 'AT&T';
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Edición Masiva"),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Selecciona qué campos deseas actualizar en los chips seleccionados:"),
+            const SizedBox(height: 16),
+            
+            // Estado
+            Row(
+              children: [
+                Checkbox(value: _cambiarEstado, onChanged: (v) => setState(() => _cambiarEstado = v == true)),
+                const Text("Estado:", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _estado,
+                    items: const [
+                      DropdownMenuItem(value: 'en_vendedor', child: Text("En vendedor")),
+                      DropdownMenuItem(value: 'en_cliente', child: Text("En cliente")),
+                      DropdownMenuItem(value: 'vendido', child: Text("Vendido")),
+                    ],
+                    onChanged: _cambiarEstado ? (v) => setState(() => _estado = v!) : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            // Compañía
+            Row(
+              children: [
+                Checkbox(value: _cambiarCompania, onChanged: (v) => setState(() => _cambiarCompania = v == true)),
+                const Text("Compañía:", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _compania,
+                    items: const [
+                      DropdownMenuItem(value: 'AT&T', child: Text("AT&T")),
+                      DropdownMenuItem(value: 'Unefon', child: Text("Unefon")),
+                      DropdownMenuItem(value: 'Telcel', child: Text("Telcel")),
+                      DropdownMenuItem(value: 'Movistar', child: Text("Movistar")),
+                      DropdownMenuItem(value: 'Bait', child: Text("Bait")),
+                      DropdownMenuItem(value: 'Por definir', child: Text("Por definir")),
+                    ],
+                    onChanged: _cambiarCompania ? (v) => setState(() => _compania = v!) : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            // Vendedor
+            Row(
+              children: [
+                Checkbox(value: _cambiarVendedor, onChanged: (v) => setState(() => _cambiarVendedor = v == true)),
+                const Text("Vendedor:", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _vendedorId,
+                    hint: const Text("Seleccionar"),
+                    items: widget.vendedores.map((v) => DropdownMenuItem(value: v.id, child: Text(v.nombre))).toList(),
+                    onChanged: _cambiarVendedor ? (v) => setState(() => _vendedorId = v) : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, null), child: const Text("Cancelar")),
+        ElevatedButton(
+          onPressed: () {
+            final map = <String, dynamic>{};
+            if (_cambiarEstado) map['estado'] = _estado;
+            if (_cambiarCompania) map['compania'] = _compania;
+            if (_cambiarVendedor && _vendedorId != null) map['vendedor_id'] = _vendedorId;
+            Navigator.pop(context, map);
+          },
+          child: const Text("Aplicar Cambios"),
+        ),
+      ],
     );
   }
 }

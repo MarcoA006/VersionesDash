@@ -43,6 +43,8 @@ abstract class AdminBackend {
   // Inventario / chips
   Future<void> asignarChipsAVendedor(List<String> iccids, String vendedorId);
   Future<void> altaChips(List<Chip> nuevos);
+  Future<void> eliminarChips(List<String> iccids);
+  Future<void> editarChipsMasivo(List<String> iccids, Map<String, dynamic> campos);
 
   // Config / killswitch
   Future<void> setConfig(String clave, String valor);
@@ -521,6 +523,23 @@ class SupabaseAdminBackend implements AdminBackend {
     for (var i = 0; i < filas.length; i += 500) {
       final lote = filas.sublist(i, (i + 500 > filas.length) ? filas.length : i + 500);
       await _sb.from(Config.tablaChips).upsert(lote);
+    }
+  }
+
+  @override
+  Future<void> eliminarChips(List<String> iccids) async {
+    for (var i = 0; i < iccids.length; i += 100) {
+      final lote = iccids.sublist(i, (i + 100 > iccids.length) ? iccids.length : i + 100);
+      await _sb.from(Config.tablaChips).delete().inFilter('iccid', lote);
+    }
+  }
+
+  @override
+  Future<void> editarChipsMasivo(List<String> iccids, Map<String, dynamic> campos) async {
+    if (campos.isEmpty) return;
+    for (var i = 0; i < iccids.length; i += 100) {
+      final lote = iccids.sublist(i, (i + 100 > iccids.length) ? iccids.length : i + 100);
+      await _sb.from(Config.tablaChips).update(campos).inFilter('iccid', lote);
     }
   }
 
