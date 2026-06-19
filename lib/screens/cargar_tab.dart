@@ -1,6 +1,7 @@
 import 'package:excel/excel.dart' as xls;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../admin_state.dart';
@@ -27,6 +28,57 @@ class _CargarTabState extends State<CargarTab> {
 
   /// Normaliza un nombre para cruzarlo (quita dobles espacios y baja a minúsculas).
   String _norm(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
+  Future<String?> _resolverVendedorFaltante(String nombreExcel, List<Vendedor> existentes) async {
+    final normName = _norm(nombreExcel);
+    final sugerencias = existentes.where((v) {
+      final n = _norm(v.nombre);
+      return n.contains(normName) || normName.contains(n);
+    }).toList();
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("Vendedor desconocido"),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("El Excel contiene un vendedor no registrado:"),
+                const SizedBox(height: 8),
+                Text(nombreExcel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 16),
+                if (sugerencias.isNotEmpty) ...[
+                  const Text("¿Es alguno de estos?"),
+                  const SizedBox(height: 8),
+                  ...sugerencias.map((s) => ListTile(
+                    title: Text(s.nombre),
+                    subtitle: Text(s.id),
+                    trailing: Icon(Icons.check_circle, color: AppColors.exito),
+                    onTap: () => Navigator.of(ctx).pop(s.id),
+                  )),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop("OMITIR"),
+              child: const Text("Omitir filas"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop("NUEVO_"),
+              child: const Text("Crear como nuevo"),
+            ),
+          ],
+        );
+      }
+    );
+  }
 
   /// Compañía a partir del texto del producto (y opcionalmente del carrier).
   String _comp(String producto, {String carrier = ''}) =>
@@ -108,6 +160,10 @@ class _CargarTabState extends State<CargarTab> {
       final encab = filas[headerIdx].map((c) => _norm(_cell(c))).toList();
       final dataStart = headerIdx + 1;
       int col(String nombre) => encab.indexOf(_norm(nombre));
+
+      // Cargar alias_vendedores
+      final aliasRes = await Supabase.instance.client.from('config').select('valor').eq('clave', 'alias_vendedores').maybeSingle();
+      final Map<String, dynamic> aliasVendedores = aliasRes != null ? jsonDecode(aliasRes['valor'].toString()) : <String, dynamic>{};
 
       // Mapa nombre_vendedor -> vendedor_id, para resolver referencias.
       final idPorNombre = {
@@ -306,35 +362,89 @@ class _CargarTabState extends State<CargarTab> {
       }
       registros = dedup;
 
-      // Crear vendedores faltantes en la BD
-      final faltantes = <String, String>{}; // nombre -> ID
+      // Resolver vendedores faltantes
+      final faltantes = <String, String?>{}; // nombre -> ID resuelto
       for (final r in registros) {
         if ((r["vendedor_id"] ?? "").toString().isEmpty) {
-          // Para chips guardamos el nombre en clave auxiliar _vnom para este bloque
           final v = (r["_vnom"] ?? "").toString();
           if (v.isNotEmpty) {
-            final genId = "VEND-${v.hashCode.abs()}";
-            faltantes.putIfAbsent(v, () => genId);
+            faltantes[v] = null;
+          }
+        }
+      }
+
+      bool nuevosAlias = false;
+      for (final v in faltantes.keys.toList()) {
+        if (aliasVendedores.containsKey(v)) {
+          faltantes[v] = aliasVendedores[v];
+          continue;
+        }
+        // Solicitar confirmación al usuario
+        final res = await _resolverVendedorFaltante(v, state.vendedores);
+        faltantes[v] = res; // puede ser OMITIR, NUEVO_, o un ID
+        if (res != null && res != "OMITIR") {
+          // Guardamos el alias temporalmente (si es NUEVO_, lo actualizamos abajo)
+          aliasVendedores[v] = res;
+          nuevosAlias = true;
+        }
+      }
+
+      // Eliminar las filas que el usuario decidió omitir
+      registros.removeWhere((r) {
+        final v = (r["_vnom"] ?? "").toString();
+        return faltantes[v] == "OMITIR";
+      });
+
+      // Procesar los "Crear como nuevo"
+      int maxId = 0;
+      for (final v in state.vendedores) {
+        if (v.id.startsWith("V")) {
+          final n = int.tryParse(v.id.substring(1));
+          if (n != null && n > maxId) maxId = n;
+        }
+      }
+
+      final nuevosVendedores = <Map<String, dynamic>>[];
+      for (final v in faltantes.keys.toList()) {
+        if (faltantes[v] == "NUEVO_") {
+          maxId++;
+          final genId = "V${maxId.toString().padLeft(3, '0')}";
+          faltantes[v] = genId;
+          aliasVendedores[v] = genId;
+          nuevosVendedores.add({
+            "vendedor_id": genId,
+            "nombre": v,
+            "usuario": genId,
+            "password_hash": "PENDIENTE",
+            "activo": true
+          });
+        }
+      }
+
+      if (nuevosVendedores.isNotEmpty) {
+        setState(() => _log = "Creando ${nuevosVendedores.length} vendedores en BD...");
+        try {
+           await Supabase.instance.client.from('vendedores').upsert(nuevosVendedores);
+        } catch (_) {}
+      }
+
+      if (nuevosAlias) {
+        try {
+          await Supabase.instance.client.from('config').upsert({'clave': 'alias_vendedores', 'valor': jsonEncode(aliasVendedores)});
+        } catch (_) {}
+      }
+
+      // Asignar los IDs resueltos a los registros
+      for (final r in registros) {
+        if ((r["vendedor_id"] ?? "").toString().isEmpty) {
+          final v = (r["_vnom"] ?? "").toString();
+          if (v.isNotEmpty && faltantes[v] != null && faltantes[v] != "OMITIR") {
             r["vendedor_id"] = faltantes[v];
           }
         }
       }
 
-      if (faltantes.isNotEmpty) {
-        setState(() => _log = "Creando ${faltantes.length} vendedores faltantes en la BD...");
-        final loteNuevos = faltantes.entries.map((e) => {
-          "vendedor_id": e.value,
-          "nombre": e.key,
-          "usuario": e.value,
-          "password_hash": "PENDIENTE",
-          "activo": true
-        }).toList();
-        try {
-           await Supabase.instance.client.from('vendedores').upsert(loteNuevos);
-        } catch (_) {}
-      }
-
-      // Crear clientes faltantes
+      // Crear clientes faltantes (sin confirmación, mantienen lógica de hash por ahora)
       final faltantesCli = <String, String>{};
       for (final r in registros) {
         if ((r["cliente_id"] ?? "").toString().isEmpty) {
