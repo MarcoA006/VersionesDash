@@ -821,9 +821,13 @@ class _DashboardTabState extends State<DashboardTab> {
 
   // ----- Export a Excel -----
   Future<void> _exportar(DashboardLogic logic) async {
-    final data = logic.filtrar(
-        anios: _anios, meses: _meses, vendedores: _vendedoresSel, ladas: _ladasSel, clientes: _clientesSel);
     final state = context.read<AdminState>();
+    final data = logic.filtrar(
+        vendedores: _vendedoresSel, 
+        ladas: _ladasSel, 
+        clientes: _clientesSel,
+        startDate: state.filtroFechaInicio,
+        endDate: state.filtroFechaFin);
     final libro = xls.Excel.createExcel();
 
     // Hoja 1: totales por vendedor x compañía

@@ -825,6 +825,8 @@ class _SurtidoTabState extends State<SurtidoTab> {
       ),
       ),
       ),
+      ),
+      ),
     );
   }
 
@@ -931,6 +933,8 @@ class _SurtidoTabState extends State<SurtidoTab> {
       ),
       ),
       ),
+      ),
+      ),
     );
   }
 
@@ -1028,6 +1032,8 @@ class _SurtidoTabState extends State<SurtidoTab> {
             );
           }),
         ],
+      ),
+      ),
       ),
       ),
       ),
