@@ -151,7 +151,7 @@ class SupabaseAdminBackend implements AdminBackend {
   Future<List<VentaHist>> historicoVentas() async {
     final esc = await _fetchAll(Config.tablaEscaneos);
     final ven = await _fetchAll('ventas');
-    final chipsRaw = await _fetchAll(Config.tablaChips, select: 'iccid, lada, compania, dn, estado, fecha_asig_cliente, fecha_alta, vendedor_id, cliente_id');
+    final chipsRaw = await _fetchAll(Config.tablaChips, select: 'iccid, lada, compania, dn, estado, fecha_asig_cliente, vendedor_id, cliente_id');
 
     String normIccid(String icc) {
       final s = icc.trim().toUpperCase();
