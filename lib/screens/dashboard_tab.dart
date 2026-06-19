@@ -25,8 +25,6 @@ class _DashboardTabState extends State<DashboardTab> {
   String? _error;
 
   // filtros
-  final Set<int> _anios = {};
-  final Set<int> _meses = {};
   final Set<String> _vendedoresSel = {};
   final Set<String> _ladasSel = {};
   final Set<String> _clientesSel = {};
@@ -74,16 +72,27 @@ class _DashboardTabState extends State<DashboardTab> {
     final state = context.watch<AdminState>();
     final logic = DashboardLogic(_historico, state.chips);
     final data = logic.filtrar(
-      anios: _anios,
-      meses: _meses,
       vendedores: _vendedoresSel,
       ladas: _ladasSel,
       clientes: _clientesSel,
+      startDate: state.filtroFechaInicio,
+      endDate: state.filtroFechaFin,
     );
     final totalesPorEstado = logic.totalesPorCompaniaYEstado(data);
     final totalGen = logic.totalGeneralPorEstado(data);
     final porVend = logic.porVendedorCompania(data);
-    // Tendencias eliminadas de la vista.
+    final tendenciasState = logic.tendenciasPorEstado(
+      vendedorId: _vendedoresSel.length == 1 ? _vendedoresSel.first : null,
+      startDate: state.filtroFechaInicio,
+      endDate: state.filtroFechaFin,
+    );
+
+    DateTime? ultimaFechaRegistro;
+    for (final v in logic.filtrar()) {
+      if (ultimaFechaRegistro == null || v.fecha.isAfter(ultimaFechaRegistro)) {
+        ultimaFechaRegistro = v.fecha;
+      }
+    }
 
     return Column(
       children: [
@@ -94,7 +103,7 @@ class _DashboardTabState extends State<DashboardTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _contadores(totalGen, totalesPorEstado),
+                _contadores(totalGen, totalesPorEstado, logic, tendenciasState, ultimaFechaRegistro),
                 const SizedBox(height: 16),
                 _graficoComportamiento(logic, data),
                 const SizedBox(height: 16),
@@ -123,20 +132,24 @@ class _DashboardTabState extends State<DashboardTab> {
           children: [
             const Text("Dashboard de ventas",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            _dropAnios(logic),
-            _dropMeses(logic),
-            _dropVendedor(state),
-            _dropLada(logic),
-            _dropCliente(logic),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _btnDateRange(state),
+                _dropVendedor(state),
+                _dropLada(logic),
+                _dropCliente(logic),
+              ],
+            ),
             if (_vendedoresSel.isNotEmpty ||
                 _ladasSel.isNotEmpty ||
                 _clientesSel.isNotEmpty ||
-                _anios.isNotEmpty ||
-                _meses.isNotEmpty)
+                state.filtroFechaInicio != null)
               TextButton.icon(
                 onPressed: () => setState(() {
-                  _anios.clear();
-                  _meses.clear();
+                  state.setFiltroFechas(null, null);
                   _vendedoresSel.clear();
                   _ladasSel.clear();
                   _clientesSel.clear();
@@ -162,51 +175,25 @@ class _DashboardTabState extends State<DashboardTab> {
     );
   }
 
-  Widget _dropAnios(DashboardLogic logic) {
+  Widget _btnDateRange(AdminState state) {
+    final start = state.filtroFechaInicio;
+    final end = state.filtroFechaFin;
+    final txt = (start != null && end != null) 
+        ? "${start.day.toString().padLeft(2,'0')}/${start.month.toString().padLeft(2,'0')}/${start.year} - ${end.day.toString().padLeft(2,'0')}/${end.month.toString().padLeft(2,'0')}/${end.year}" 
+        : "Todas";
     return InkWell(
       onTap: () async {
-        final res = await showDialog<Set<int>>(
+        final res = await showDateRangePicker(
           context: context,
-          builder: (_) => MultiSelectSearchDialog<int>(
-            title: "Seleccionar Año",
-            items: logic.aniosDisponibles,
-            initialSelected: _anios,
-            itemLabel: (a) => a.toString(),
-          ),
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now(),
+          initialDateRange: (start != null && end != null) ? DateTimeRange(start: start, end: end) : null,
         );
         if (res != null) {
-          setState(() {
-            _anios.clear();
-            _anios.addAll(res);
-          });
+          state.setFiltroFechas(res.start, res.end);
         }
       },
-      child: _chipFiltro("Año", _anios.isEmpty ? "Todos" : _anios.join(", ")),
-    );
-  }
-
-  static const _nombresMes = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-
-  Widget _dropMeses(DashboardLogic logic) {
-    return InkWell(
-      onTap: () async {
-        final res = await showDialog<Set<int>>(
-          context: context,
-          builder: (_) => MultiSelectSearchDialog<int>(
-            title: "Seleccionar Mes",
-            items: logic.mesesDisponibles(_anios),
-            initialSelected: _meses,
-            itemLabel: (m) => _nombresMes[m],
-          ),
-        );
-        if (res != null) {
-          setState(() {
-            _meses.clear();
-            _meses.addAll(res);
-          });
-        }
-      },
-      child: _chipFiltro("Mes", _meses.isEmpty ? "Todos" : (_meses.toList()..sort()).map((m) => _nombresMes[m]).join(", ")),
+      child: _chipFiltro("Fecha", txt),
     );
   }
 
@@ -301,33 +288,57 @@ class _DashboardTabState extends State<DashboardTab> {
   }
 
   // ----- Contadores -----
-  Widget _contadores(Map<String, int> totalGen, Map<String, Map<String, int>> totales) {
+  Widget _contadores(Map<String, int> totalGen, Map<String, Map<String, int>> totales, DashboardLogic logic, Map<String, Map<String, ({int actual, int anterior, double? pct})>> tendenciasState, DateTime? ultimaFecha) {
     final ambito = _vendedoresSel.isEmpty ? "Global" : "Vendedores seleccionados";
+    final lastDateStr = ultimaFecha != null ? "${ultimaFecha.day.toString().padLeft(2, '0')}/${ultimaFecha.month.toString().padLeft(2, '0')}/${ultimaFecha.year}" : "N/A";
+    
+    // Calcular tendencia total sumando AT&T y Unefon
+    double? pctTotalVendido;
+    final actVendidoTotal = (tendenciasState["AT&T"]?["vendido"]?.actual ?? 0) + (tendenciasState["UNEFON"]?["vendido"]?.actual ?? 0);
+    final antVendidoTotal = (tendenciasState["AT&T"]?["vendido"]?.anterior ?? 0) + (tendenciasState["UNEFON"]?["vendido"]?.anterior ?? 0);
+    if (antVendidoTotal > 0) {
+      pctTotalVendido = (actVendidoTotal - antVendidoTotal) / antVendidoTotal * 100;
+    } else if (antVendidoTotal == 0 && actVendidoTotal > 0) {
+      pctTotalVendido = 100;
+    }
+
+    final tendenciaTotal = {
+      "vendido": (actual: actVendidoTotal, anterior: antVendidoTotal, pct: pctTotalVendido),
+    };
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Activaciones — $ambito",
-            style:
-                const TextStyle(fontSize: 14, color: Colors.black54)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text("Activaciones — $ambito",
+                style: const TextStyle(fontSize: 14, color: Colors.black54)),
+            Text("Último registro global: $lastDateStr",
+                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54)),
+          ],
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
-            _cardContadorDoble("TOTAL", totalGen, AppColors.acento),
+            _cardContadorDoble("TOTAL (AT&T + Unefon)", totalGen, AppColors.acento, logic, tendenciaTotal),
             ...totales.entries.map((e) =>
-                _cardContadorDoble(e.key, e.value, _colorComp(e.key))),
+                _cardContadorDoble(e.key, e.value, _colorComp(e.key), logic, tendenciasState[e.key])),
           ],
         ),
       ],
     );
   }
 
-  Widget _cardContadorDoble(String titulo, Map<String, int> valores, Color color) {
+  Widget _cardContadorDoble(String titulo, Map<String, int> valores, Color color, DashboardLogic logic, Map<String, ({int actual, int anterior, double? pct})>? tendencias) {
     final enCliente = valores["en_cliente"] ?? 0;
     final vendido = valores["vendido"] ?? 0;
+    final pctVendido = tendencias?["vendido"]?.pct;
+    
     return Container(
-      width: 200,
+      width: 260,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.superficie,
@@ -346,23 +357,42 @@ class _DashboardTabState extends State<DashboardTab> {
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              // Inventario (Más pequeño)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("$enCliente",
                       style: TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+                          fontSize: 16, fontWeight: FontWeight.bold, color: color)),
                   const Text("En Cliente", style: TextStyle(fontSize: 10, color: Colors.black54)),
                 ],
               ),
+              // Vendidos (Más grande) + Tendencia
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text("$vendido",
-                      style: TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.exito)),
-                  const Text("Vendido", style: TextStyle(fontSize: 10, color: Colors.black54)),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      if (pctVendido != null)
+                        Text(
+                          "${pctVendido > 0 ? '+' : ''}${pctVendido.toStringAsFixed(1)}%",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: pctVendido > 0 ? AppColors.exito : (pctVendido < 0 ? AppColors.alerta : Colors.grey),
+                          ),
+                        ),
+                      if (pctVendido != null) const SizedBox(width: 4),
+                      Text("$vendido",
+                          style: const TextStyle(
+                              fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.exito)),
+                    ],
+                  ),
+                  const Text("Vendido", style: TextStyle(fontSize: 12, color: Colors.black54)),
                 ],
               )
             ],
@@ -402,9 +432,9 @@ class _DashboardTabState extends State<DashboardTab> {
   Color _colorComp(String c) => switch (c) {
         "AT&T" => const Color(0xFF00A8E0),
         "UNEFON" => const Color(0xFFFFCC00),
-        "MOVISTAR" => const Color(0xFF019DF4),
-        "TELCEL" => const Color(0xFF1B6CB3),
-        "BAIT" => const Color(0xFFE31837),
+        "MOVISTAR" => const Color(0xFF4CAF50), // Verde
+        "TELCEL" => const Color(0xFF000080),   // Azul Marino
+        "BAIT" => const Color(0xFF000000),     // Negro
         _ => Colors.grey,
       };
 

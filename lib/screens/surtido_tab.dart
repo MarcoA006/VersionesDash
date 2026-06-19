@@ -37,6 +37,7 @@ class _SurtidoTabState extends State<SurtidoTab> {
   // Estado para ordenamiento de tabla Pedido
   String? _sortCol;
   bool _sortAsc = false;
+  String? _highlightedCliente;
 
   static const _companias5 = ["AT&T", "Unefon", "Movistar", "Telcel", "Bait"];
 
@@ -97,6 +98,8 @@ class _SurtidoTabState extends State<SurtidoTab> {
       if (_ladasSel.isNotEmpty && !_ladasSel.contains(v.lada)) return false;
       if (_clientesSel.isNotEmpty && !_clientesSel.contains(v.clienteId)) return false;
       if (_companiasSel.isNotEmpty && !_matchCompania(v.compania, _companiasSel)) return false;
+      if (state.filtroFechaInicio != null && v.fecha.isBefore(state.filtroFechaInicio!)) return false;
+      if (state.filtroFechaFin != null && v.fecha.isAfter(state.filtroFechaFin!.add(const Duration(days: 1)))) return false;
       return true;
     }).toList();
 
@@ -377,10 +380,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
       if (_vendedoresSel.isNotEmpty && !_vendedoresSel.contains(v.vendedorId)) return false;
       if (_ladasSel.isNotEmpty && !_ladasSel.contains(v.lada)) return false;
       if (_clientesSel.isNotEmpty && !_clientesSel.contains(v.clienteId)) return false;
+      if (_companiasSel.isNotEmpty && !_matchCompania(v.compania, _companiasSel)) return false;
+      if (state.filtroFechaInicio != null && v.fecha.isBefore(state.filtroFechaInicio!)) return false;
+      if (state.filtroFechaFin != null && v.fecha.isAfter(state.filtroFechaFin!.add(const Duration(days: 1)))) return false;
       return true;
     }).toList();
 
-    final companias = SurtidoLogic.companiasSurtido;
+    final companias = SurtidoLogic.companiasSurtido.where((c) {
+      if (_companiasSel.isEmpty) return true;
+      return _matchCompania(c, _companiasSel);
+    }).toList();
     final activMax = logic.activacionMaximaPorCliente(ventasF);
     final invPorId = logic.inventarioPorCliente();
     final nombrePorId = {for (final c in state.clientes) c.id: c.nombre};
@@ -433,10 +442,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
       if (_vendedoresSel.isNotEmpty && !_vendedoresSel.contains(v.vendedorId)) return false;
       if (_ladasSel.isNotEmpty && !_ladasSel.contains(v.lada)) return false;
       if (_clientesSel.isNotEmpty && !_clientesSel.contains(v.clienteId)) return false;
+      if (_companiasSel.isNotEmpty && !_matchCompania(v.compania, _companiasSel)) return false;
+      if (state.filtroFechaInicio != null && v.fecha.isBefore(state.filtroFechaInicio!)) return false;
+      if (state.filtroFechaFin != null && v.fecha.isAfter(state.filtroFechaFin!.add(const Duration(days: 1)))) return false;
       return true;
     }).toList();
 
-    final companias = SurtidoLogic.companiasSurtido;
+    final companias = SurtidoLogic.companiasSurtido.where((c) {
+      if (_companiasSel.isEmpty) return true;
+      return _matchCompania(c, _companiasSel);
+    }).toList();
     final activMax = logic.activacionMaximaPorCliente(ventasF);
     final invPorId = logic.inventarioPorCliente();
     final nombrePorId = {for (final c in state.clientes) c.id: c.nombre};
@@ -474,10 +489,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
       if (_vendedoresSel.isNotEmpty && !_vendedoresSel.contains(v.vendedorId)) return false;
       if (_ladasSel.isNotEmpty && !_ladasSel.contains(v.lada)) return false;
       if (_clientesSel.isNotEmpty && !_clientesSel.contains(v.clienteId)) return false;
+      if (_companiasSel.isNotEmpty && !_matchCompania(v.compania, _companiasSel)) return false;
+      if (state.filtroFechaInicio != null && v.fecha.isBefore(state.filtroFechaInicio!)) return false;
+      if (state.filtroFechaFin != null && v.fecha.isAfter(state.filtroFechaFin!.add(const Duration(days: 1)))) return false;
       return true;
     }).toList();
 
-    final companias = SurtidoLogic.companiasSurtido;
+    final companias = SurtidoLogic.companiasInv.where((c) {
+      if (_companiasSel.isEmpty) return true;
+      return _matchCompania(c, _companiasSel);
+    }).toList();
     final activMax = logic.activacionMaximaPorCliente(ventasF);
     final invPorId = logic.inventarioPorCliente();
     final nombrePorId = {for (final c in state.clientes) c.id: c.nombre};
@@ -526,11 +547,14 @@ class _SurtidoTabState extends State<SurtidoTab> {
   }
 
   Future<void> _exportarMapa() async {
+    final state = context.read<AdminState>();
     final ventasF = _ventas.where((v) {
       if (_vendedoresSel.isNotEmpty && !_vendedoresSel.contains(v.vendedorId)) return false;
       if (_ladasSel.isNotEmpty && !_ladasSel.contains(v.lada)) return false;
       if (_clientesSel.isNotEmpty && !_clientesSel.contains(v.clienteId)) return false;
       if (_companiasSel.isNotEmpty && !_matchCompania(v.compania, _companiasSel)) return false;
+      if (state.filtroFechaInicio != null && v.fecha.isBefore(state.filtroFechaInicio!)) return false;
+      if (state.filtroFechaFin != null && v.fecha.isAfter(state.filtroFechaFin!.add(const Duration(days: 1)))) return false;
       return true;
     }).toList();
 
@@ -569,38 +593,23 @@ class _SurtidoTabState extends State<SurtidoTab> {
     final libro = xls.Excel.createExcel();
     final h1 = libro['Mapa_Ventas'];
     h1.appendRow([
-      xls.TextCellValue('Fecha'),
       xls.TextCellValue('Cliente'),
+      xls.TextCellValue('Fecha de escaneo'),
+      xls.TextCellValue('Hora de escaneo'),
       xls.TextCellValue('Compañía'),
       xls.TextCellValue('Lada'),
-      xls.TextCellValue('Ubicación (Maps)'),
-      xls.TextCellValue('Colonia'),
+      xls.TextCellValue('Coordenadas'),
     ]);
 
     for (var i = 0; i < mapaVentas.length; i++) {
       final v = mapaVentas[i];
-      
-      String colonia = '';
-      try {
-        final url = Uri.parse("https://nominatim.openstreetmap.org/reverse?format=json&lat=${v.lat}&lon=${v.lng}&zoom=14");
-        final resp = await http.get(url, headers: {"User-Agent": "com.acc.admin"});
-        if (resp.statusCode == 200) {
-          final data = json.decode(resp.body);
-          final addr = data['address'];
-          if (addr != null) {
-             colonia = addr['suburb'] ?? addr['neighbourhood'] ?? addr['village'] ?? addr['town'] ?? addr['city'] ?? '';
-          }
-        }
-        await Future.delayed(const Duration(milliseconds: 600)); // Límite de Nominatim
-      } catch (_) {}
-
       h1.appendRow([
-        xls.TextCellValue(v.fecha.toIso8601String().substring(0, 10)),
         xls.TextCellValue(v.clienteNombre),
+        xls.TextCellValue(v.fecha.toIso8601String().substring(0, 10)),
+        xls.TextCellValue(v.fecha.toIso8601String().substring(11, 19)),
         xls.TextCellValue(v.compania),
         xls.TextCellValue(v.lada),
         xls.FormulaCellValue('HYPERLINK("https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lng}", "${v.lat}, ${v.lng}")'),
-        xls.TextCellValue(colonia),
       ]);
     }
     libro.delete('Sheet1');
@@ -631,14 +640,26 @@ class _SurtidoTabState extends State<SurtidoTab> {
       int diasDelMes,
       Map<String, double?> tendencias,
       AdminState state) {
-    final companias = SurtidoLogic.companiasSurtido;
+    final companias = SurtidoLogic.companiasSurtido.where((c) {
+      if (_companiasSel.isEmpty) return true;
+      return _matchCompania(c, _companiasSel);
+    }).toList();
+
+    Map<int, TableColumnWidth> colWidths = {
+      0: const FixedColumnWidth(180),
+    };
+    for (int i = 0; i < companias.length; i++) {
+      colWidths[i + 1] = const FixedColumnWidth(70);
+    }
+    colWidths[companias.length + 1] = const FixedColumnWidth(80);
+    colWidths[companias.length + 2] = const FixedColumnWidth(80);
 
     Widget celdaPedido(int max, int inv) {
       final p = SurtidoLogic.pedido(max, inv, diasDelMes);
       final color = Color(SurtidoLogic.colorPedido(p));
       final textStyle = TextStyle(
         fontWeight: FontWeight.bold,
-        color: p < 0 ? Colors.white : Colors.black,
+        color: (p <= -3 || p >= 1) ? Colors.white : Colors.black,
         fontSize: 13,
       );
 
@@ -677,22 +698,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
       ),
       SizedBox(
         height: 280,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
+        child: Scrollbar(
+          thumbVisibility: true,
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Table(
-          columnWidths: const {
-            0: FixedColumnWidth(180),
-            1: FixedColumnWidth(70),
-            2: FixedColumnWidth(70),
-            3: FixedColumnWidth(70),
-            4: FixedColumnWidth(70),
-            5: FixedColumnWidth(70),
-            6: FixedColumnWidth(80),
-            7: FixedColumnWidth(80),
-            8: FixedColumnWidth(80),
-          },
+            scrollDirection: Axis.vertical,
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Table(
+          columnWidths: colWidths,
         border: TableBorder.all(color: Colors.grey.shade300),
         children: [
           TableRow(
@@ -759,15 +774,19 @@ class _SurtidoTabState extends State<SurtidoTab> {
             final iconTend = pct == null ? Icons.remove : (sube ? Icons.arrow_upward : Icons.arrow_downward);
 
             return TableRow(
+              decoration: _highlightedCliente == cli ? BoxDecoration(color: Colors.blue.withOpacity(0.15)) : null,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  child: Row(
-                    children: [
-                      Icon(Icons.store, color: visitColor, size: 16),
-                      const SizedBox(width: 4),
-                      Expanded(child: Text(cli, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
-                    ],
+                InkWell(
+                  onTap: () => setState(() => _highlightedCliente = _highlightedCliente == cli ? null : cli),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.store, color: visitColor, size: 16),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text(cli, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                      ],
+                    ),
                   ),
                 ),
                 ...companias.map((c) {
@@ -811,7 +830,17 @@ class _SurtidoTabState extends State<SurtidoTab> {
 
   Widget _buildTablaMaximas(
       List<String> clientes, Map<String, Map<String, int>> activMax, Map<String, Map<String, int>> invPorId, Map<String, String> idPorNombre) {
-    final companias = SurtidoLogic.companiasSurtido;
+    final companias = SurtidoLogic.companiasSurtido.where((c) {
+      if (_companiasSel.isEmpty) return true;
+      return _matchCompania(c, _companiasSel);
+    }).toList();
+
+    Map<int, TableColumnWidth> colWidths = {
+      0: const FixedColumnWidth(180),
+    };
+    for (int i = 0; i < companias.length; i++) {
+      colWidths[i + 1] = const FixedColumnWidth(80);
+    }
 
     return _card(
       "Activaciones Máximas por Cliente (4 meses)",
@@ -822,20 +851,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
       ),
       SizedBox(
         height: 280,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
+        child: Scrollbar(
+          thumbVisibility: true,
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Table(
-          columnWidths: const {
-            0: FixedColumnWidth(180),
-            1: FixedColumnWidth(80),
-            2: FixedColumnWidth(80),
-            3: FixedColumnWidth(80),
-            4: FixedColumnWidth(80),
-            5: FixedColumnWidth(80),
-            6: FixedColumnWidth(80),
-          },
+            scrollDirection: Axis.vertical,
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Table(
+          columnWidths: colWidths,
         border: TableBorder.all(color: Colors.grey.shade300),
         children: [
           TableRow(
@@ -864,15 +889,19 @@ class _SurtidoTabState extends State<SurtidoTab> {
             }
 
             return TableRow(
+              decoration: _highlightedCliente == cli ? BoxDecoration(color: Colors.blue.withOpacity(0.15)) : null,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  child: Row(
-                    children: [
-                      Icon(Icons.store, color: visitColor, size: 16),
-                      const SizedBox(width: 4),
-                      Expanded(child: Text(cli, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
-                    ],
+                InkWell(
+                  onTap: () => setState(() => _highlightedCliente = _highlightedCliente == cli ? null : cli),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.store, color: visitColor, size: 16),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text(cli, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                      ],
+                    ),
                   ),
                 ),
                 ...companias.map((c) {
@@ -907,7 +936,18 @@ class _SurtidoTabState extends State<SurtidoTab> {
 
   Widget _buildTablaInventario(List<String> clientes,
       Map<String, Map<String, int>> invPorId, Map<String, String> idPorNombre) {
-    final companias = _companias5;
+    final companias = SurtidoLogic.companiasInv.where((c) {
+      if (_companiasSel.isEmpty) return true;
+      return _matchCompania(c, _companiasSel);
+    }).toList();
+
+    Map<int, TableColumnWidth> colWidths = {
+      0: const FixedColumnWidth(180),
+    };
+    for (int i = 0; i < companias.length; i++) {
+      colWidths[i + 1] = const FixedColumnWidth(80);
+    }
+    colWidths[companias.length + 1] = const FixedColumnWidth(80);
 
     return _card(
       "Inventario QR por Cliente",
@@ -918,22 +958,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
       ),
       SizedBox(
         height: 380,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
+        child: Scrollbar(
+          thumbVisibility: true,
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Table(
-          columnWidths: const {
-            0: FixedColumnWidth(180),
-            1: FixedColumnWidth(80),
-            2: FixedColumnWidth(80),
-            3: FixedColumnWidth(80),
-            4: FixedColumnWidth(80),
-            5: FixedColumnWidth(80),
-            6: FixedColumnWidth(80),
-            7: FixedColumnWidth(80),
-            8: FixedColumnWidth(80),
-          },
+            scrollDirection: Axis.vertical,
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Table(
+          columnWidths: colWidths,
         border: TableBorder.all(color: Colors.grey.shade300),
         children: [
           TableRow(
@@ -953,10 +987,14 @@ class _SurtidoTabState extends State<SurtidoTab> {
             }
 
             return TableRow(
+              decoration: _highlightedCliente == cli ? BoxDecoration(color: Colors.blue.withOpacity(0.15)) : null,
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  child: Text(cli, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                InkWell(
+                  onTap: () => setState(() => _highlightedCliente = _highlightedCliente == cli ? null : cli),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    child: Text(cli, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                  ),
                 ),
                 ...companias.map((c) {
                   final val = inv[c] ?? 0;

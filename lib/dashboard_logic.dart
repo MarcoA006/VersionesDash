@@ -9,7 +9,7 @@ class DashboardLogic {
   final List<Chip> _chips;
   DashboardLogic(this._todo, [this._chips = const []]);
 
-  static const companias = ["AT&T", "UNEFON", "MOVISTAR", "TELCEL", "BAIT", "Por definir"];
+  static const companias = ["AT&T", "UNEFON", "MOVISTAR", "TELCEL", "BAIT"];
 
   static String agrupa(String c) {
     final u = c.toUpperCase();
@@ -55,13 +55,14 @@ class DashboardLogic {
       .toList()
     ..sort());
 
-  /// Aplica los filtros activos.
   List<VentaHist> filtrar({
     Set<int>? anios,
     Set<int>? meses,
     Set<String>? vendedores,
     Set<String>? ladas,
     Set<String>? clientes,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _todo.where((v) {
       if (anios != null && anios.isNotEmpty && !anios.contains(v.anio)) {
@@ -79,6 +80,10 @@ class DashboardLogic {
       if (clientes != null && clientes.isNotEmpty && !clientes.contains(v.clienteNombre)) {
         return false;
       }
+      
+      if (startDate != null && v.fecha.isBefore(startDate)) return false;
+      if (endDate != null && v.fecha.isAfter(endDate.add(const Duration(days: 1)))) return false;
+
       return true;
     }).toList();
   }
@@ -126,48 +131,51 @@ class DashboardLogic {
   }
 
   /// Tendencia por compañía desglosada por estado (en_cliente vs vendido).
-  /// Devuelve: { "AT&T": { "en_cliente": (tendencia), "vendido": (tendencia) }, ... }
-  Map<String, Map<String, ({int actual, int anterior, double? pct})>> tendenciasPorEstado(
-      {String? vendedorId}) {
-    final base = _todo.where((v) {
-      if (vendedorId != null && v.vendedorId != vendedorId) return false;
-      return true;
-    }).toList();
-
-    final periodos = base.map((v) => v.periodo).toSet().toList()..sort();
+  /// Compara el periodo [startDate, endDate] contra el periodo previo de misma duración.
+  Map<String, Map<String, ({int actual, int anterior, double? pct})>> tendenciasPorEstado({
+    String? vendedorId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
     final out = <String, Map<String, ({int actual, int anterior, double? pct})>>{};
     
-    if (periodos.isEmpty) {
-      for (final c in companias) {
-        out[c] = {
-          "en_cliente": (actual: 0, anterior: 0, pct: null),
-          "vendido": (actual: 0, anterior: 0, pct: null)
-        };
-      }
-      return out;
-    }
+    // Periodo actual
+    final sDate = startDate ?? DateTime(2000);
+    final eDate = endDate ?? DateTime.now();
+    final duration = eDate.difference(sDate);
     
-    final pActual = periodos.last;
-    final pPrev = periodos.length >= 2 ? periodos[periodos.length - 2] : null;
+    // Periodo anterior
+    final prevEndDate = sDate.subtract(const Duration(days: 1));
+    final prevStartDate = prevEndDate.subtract(duration);
 
     for (final c in companias) {
       out[c] = {};
       for (final estado in ["en_cliente", "vendido"]) {
         final esVendido = estado == "vendido";
-        final act = base
-            .where((v) => v.periodo == pActual && agrupa(v.compania) == c && (v.origen == 'venta') == esVendido)
-            .length;
-        final ant = pPrev == null
-            ? 0
-            : base
-                .where((v) => v.periodo == pPrev && agrupa(v.compania) == c && (v.origen == 'venta') == esVendido)
-                .length;
+        
+        final act = _todo.where((v) {
+          if (vendedorId != null && v.vendedorId != vendedorId) return false;
+          if (agrupa(v.compania) != c) return false;
+          if ((v.origen == 'venta') != esVendido) return false;
+          if (v.fecha.isBefore(sDate) || v.fecha.isAfter(eDate.add(const Duration(days: 1)))) return false;
+          return true;
+        }).length;
+
+        final ant = _todo.where((v) {
+          if (vendedorId != null && v.vendedorId != vendedorId) return false;
+          if (agrupa(v.compania) != c) return false;
+          if ((v.origen == 'venta') != esVendido) return false;
+          if (v.fecha.isBefore(prevStartDate) || v.fecha.isAfter(prevEndDate.add(const Duration(days: 1)))) return false;
+          return true;
+        }).length;
+
         double? pct;
-        if (pPrev != null && ant > 0) {
+        if (ant > 0) {
           pct = (act - ant) / ant * 100;
-        } else if (pPrev != null && ant == 0 && act > 0) {
+        } else if (ant == 0 && act > 0) {
           pct = 100;
         }
+        
         out[c]![estado] = (actual: act, anterior: ant, pct: pct);
       }
     }
@@ -196,7 +204,13 @@ class DashboardLogic {
     return m;
   }
 
-  int totalGeneral(List<VentaHist> data) => data.length;
+  /// Total general que suma SÓLO AT&T y Unefon
+  int totalGeneral(List<VentaHist> data) {
+    return data.where((v) {
+      final g = agrupa(v.compania);
+      return g == "AT&T" || g == "UNEFON";
+    }).length;
+  }
 
   Map<String, int> totalGeneralPorEstado(List<VentaHist> data) {
     int enCliente = 0;
@@ -300,8 +314,8 @@ class SurtidoLogic {
   final List<Chip> chips;
   SurtidoLogic(this.ventas, this.chips);
 
-  static const companiasSurtido = ["AT&T", "Unefon", "Movistar", "Telcel", "Bait", "Por definir"];
-  static const companiasInv = ["AT&T", "Fieldway", "Movistar", "Telcel", "Telcel Porta", "Unefon", "Bait", "Por definir"];
+  static const companiasSurtido = ["AT&T", "Unefon", "Movistar", "Telcel", "Bait"];
+  static const companiasInv = ["AT&T", "Fieldway", "Movistar", "Telcel", "Telcel Porta", "Unefon", "Bait"];
 
   /// Normaliza los nombres de compañía viniendo de la BD / Excel
   static String normalizarComp(String c, {bool upper = false}) {
@@ -427,8 +441,8 @@ class SurtidoLogic {
   }
 
   static int colorPedido(int pedido) {
-    if (pedido > 0) return 0xFFFFF200; // amarillo: surtir
-    if (pedido < 0) return 0xFFFF4D4D; // rojo: sobra
+    if (pedido <= -3) return 0xFFFF4D4D; // rojo
+    if (pedido >= 1) return 0xFF4CAF50; // verde
     return 0x00000000;
   }
 }

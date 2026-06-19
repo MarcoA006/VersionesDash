@@ -16,6 +16,16 @@ class AdminState extends ChangeNotifier {
   List<Admin> admins = [];
   bool appActiva = true;
 
+  // Filtro de fechas global
+  DateTime? filtroFechaInicio;
+  DateTime? filtroFechaFin;
+
+  void setFiltroFechas(DateTime? inicio, DateTime? fin) {
+    filtroFechaInicio = inicio;
+    filtroFechaFin = fin;
+    notifyListeners();
+  }
+
   void iniciarSesion(Admin a) {
     admin = a;
     notifyListeners();
@@ -43,6 +53,13 @@ class AdminState extends ChangeNotifier {
     escaneos = res[4] as List<Escaneo>;
     admins = (res[5] as List<Admin>)..sort((a, b) => a.usuario.compareTo(b.usuario));
     appActiva = ((res[6] as String?) ?? "TRUE").toUpperCase() == "TRUE";
+    
+    if (filtroFechaInicio == null && filtroFechaFin == null) {
+      final now = DateTime.now();
+      filtroFechaFin = now;
+      filtroFechaInicio = DateTime(now.year, now.month - 4, now.day);
+    }
+    
     notifyListeners();
   }
 
