@@ -171,14 +171,15 @@ class _CargarTabState extends State<CargarTab> {
         }
       } else if (tipo == "inv_vendedor") {
         tablaDestino = "chips";
-        final cFecha = col("fecha asignacion vendedor"),
+        final cFecha = col("fecha asignacion vendedor") != -1 ? col("fecha asignacion vendedor") : col("fecha"),
             cVend = col("vendedor"),
             cProd = col("producto"),
             cIcc = col("iccid"),
             cDn = col("dn"),
-            cCarrierVend = col("carrier") != -1 ? col("carrier") : col("compañía");  // columna carrier/compañía opcional
-        if ([cIcc, cVend, cProd].contains(-1)) {
-          _fin("No encuentro las columnas esperadas (iccid, vendedor, producto).");
+            cLada = col("lada"),
+            cCarrierVend = col("carrier") != -1 ? col("carrier") : col("compañía");
+        if ([cIcc, cVend].contains(-1)) {
+          _fin("No encuentro las columnas esperadas (iccid, vendedor).");
           return;
         }
         for (var i = 3; i < filas.length; i++) {
@@ -187,8 +188,7 @@ class _CargarTabState extends State<CargarTab> {
           if (iccRaw.isEmpty || iccRaw.toLowerCase() == "iccid" || iccRaw.toLowerCase() == "icc") continue;
           final icc = _normIccid(iccRaw);
 
-          final prod = _cell(r[cProd]).trim();
-          if (prod.isEmpty || prod == "0" || prod == "0.0" || prod.toLowerCase() == "producto") continue;
+          final prod = cProd >= 0 ? _cell(r[cProd]).trim() : "";
 
           final vendNombre = _cell(r[cVend]).trim();
           final vid = idPorNombre[_norm(vendNombre)] ?? "";
@@ -199,10 +199,14 @@ class _CargarTabState extends State<CargarTab> {
             "producto": prod,
             "compania": compDetectada,
             "estado": "en_vendedor",
+            "vendedor": vendNombre,
             "fecha_asig_vendedor":
                 cFecha >= 0 ? _fechaIso(_cell(r[cFecha])) : "",
           };
           if (vid.isNotEmpty) fila["vendedor_id"] = vid;
+
+          final ladaStr = cLada >= 0 ? _cell(r[cLada]).trim() : "";
+          if (ladaStr.isNotEmpty) fila["lada"] = ladaStr;
 
           final dnStr = cDn >= 0 ? _cell(r[cDn]).trim() : "";
           final dnVal = double.tryParse(dnStr);
@@ -213,15 +217,16 @@ class _CargarTabState extends State<CargarTab> {
         }
       } else if (tipo == "inv_cliente") {
         tablaDestino = "chips";
-        final cFecha = col("fecha asignacion cliente"),
+        final cFecha = col("fecha asignacion cliente") != -1 ? col("fecha asignacion cliente") : col("fecha"),
             cCarrier = col("carrier") != -1 ? col("carrier") : col("compañía"),
             cVend = col("vendedor"),
             cCli = col("cliente"),
             cProd = col("producto"),
             cIcc = col("iccid"),
+            cLada = col("lada"),
             cDn = col("dn");
-        if ([cIcc, cCli, cProd].contains(-1)) {
-          _fin("No encuentro las columnas esperadas (iccid, cliente, producto).");
+        if ([cIcc, cCli].contains(-1)) {
+          _fin("No encuentro las columnas esperadas (iccid, cliente).");
           return;
         }
         for (var i = 3; i < filas.length; i++) {
@@ -230,8 +235,7 @@ class _CargarTabState extends State<CargarTab> {
           if (iccRaw.isEmpty || iccRaw.toLowerCase() == "iccid" || iccRaw.toLowerCase() == "icc") continue;
           final icc = _normIccid(iccRaw);
 
-          final prod = _cell(r[cProd]).trim();
-          if (prod.isEmpty || prod == "0" || prod == "0.0" || prod.toLowerCase() == "producto") continue;
+          final prod = cProd >= 0 ? _cell(r[cProd]).trim() : "";
 
           final vendNombre = cVend >= 0 ? _cell(r[cVend]).trim() : "";
           final vid = idPorNombre[_norm(vendNombre)] ?? "";
@@ -245,10 +249,15 @@ class _CargarTabState extends State<CargarTab> {
             "producto": prod,
             "compania": compDetectadaCli,
             "estado": "en_cliente",
+            "vendedor": vendNombre,
+            "cliente": cliNombre,
             "fecha_asig_cliente": cFecha >= 0 ? _fechaIso(_cell(r[cFecha])) : "",
           };
           if (vid.isNotEmpty) fila["vendedor_id"] = vid;
           if (cid.isNotEmpty) fila["cliente_id"] = cid;
+
+          final ladaStr = cLada >= 0 ? _cell(r[cLada]).trim() : "";
+          if (ladaStr.isNotEmpty) fila["lada"] = ladaStr;
 
           final dnStr = cDn >= 0 ? _cell(r[cDn]).trim() : "";
           final dnVal = double.tryParse(dnStr);
@@ -302,6 +311,30 @@ class _CargarTabState extends State<CargarTab> {
         }).toList();
         try {
            await Supabase.instance.client.from('vendedores').upsert(loteNuevos);
+        } catch (_) {}
+      }
+
+      // Crear clientes faltantes
+      final faltantesCli = <String, String>{};
+      for (final r in registros) {
+        if ((r["cliente_id"] ?? "").toString().isEmpty) {
+          final c = (r["cliente"] ?? "").toString();
+          if (c.isNotEmpty) {
+            final genId = "CLI-${c.hashCode.abs()}-${DateTime.now().millisecond}";
+            faltantesCli.putIfAbsent(c, () => genId);
+            r["cliente_id"] = faltantesCli[c];
+          }
+        }
+      }
+      if (faltantesCli.isNotEmpty) {
+        setState(() => _log = "Creando ${faltantesCli.length} clientes faltantes en la BD...");
+        final loteCli = faltantesCli.entries.map((e) => {
+          "cliente_id": e.value,
+          "nombre": e.key,
+          "activo": true
+        }).toList();
+        try {
+           await Supabase.instance.client.from('clientes').upsert(loteCli);
         } catch (_) {}
       }
 
