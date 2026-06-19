@@ -270,6 +270,22 @@ class _VerInventarioState extends State<_VerInventario> {
                 icon: const Icon(Icons.download, size: 18, color: Colors.blue),
                 label: const Text("Exportar a Excel"),
               ),
+              const SizedBox(width: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  _filtroCtrl.clear();
+                  setState(() {
+                    _q = "";
+                    _vendedoresSel.clear();
+                    _estadosSel.clear();
+                    _ladasSel.clear();
+                    _clientesSel.clear();
+                    _companiasSel.clear();
+                  });
+                },
+                icon: const Icon(Icons.clear_all, size: 18),
+                label: const Text("Limpiar filtros"),
+              ),
             ],
           ),
           const SizedBox(height: 4),

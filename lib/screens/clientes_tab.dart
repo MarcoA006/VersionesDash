@@ -99,6 +99,19 @@ class _ClientesTabState extends State<ClientesTab> {
                   onChanged: (v) => setState(() => _filtroRutaId = v),
                 ),
               ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () {
+                  _filtroCtrl.clear();
+                  setState(() {
+                    _q = "";
+                    _filtroVendedorId = null;
+                    _filtroRutaId = null;
+                  });
+                },
+                icon: const Icon(Icons.clear_all),
+                tooltip: "Limpiar filtros",
+              ),
             ],
           ),
           const SizedBox(height: 12),
