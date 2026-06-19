@@ -158,12 +158,12 @@ class _CargarTabState extends State<CargarTab> {
 
           final fila = <String, dynamic>{
             "fecha": _fechaIso(_cell(r[cFecha])),
-            "vendedor": vendNombre,
-            "cliente": cliNombre,
             "iccid": icc,
             "producto": prod,
             "plaza": cPlaza >= 0 ? _cell(r[cPlaza]) : "",
             "compania": _comp(prod),
+            "_vnom": vendNombre,
+            "_cnom": cliNombre,
           };
           if (vid.isNotEmpty) fila["vendedor_id"] = vid;
           if (cid.isNotEmpty) fila["cliente_id"] = cid;
@@ -217,10 +217,10 @@ class _CargarTabState extends State<CargarTab> {
             "producto": prod,
             "compania": compDetectada,
             "estado": "en_vendedor",
-            "vendedor": vendNombre,
-            "fecha_asig_vendedor":
-                cFecha >= 0 ? _fechaIso(_cell(r[cFecha])) : "",
+            "_vnom": vendNombre,
           };
+          final fechaVend = cFecha >= 0 ? _fechaIso(_cell(r[cFecha])) : "";
+          if (fechaVend.isNotEmpty) fila["fecha_asig_vendedor"] = fechaVend;
           if (vid.isNotEmpty) fila["vendedor_id"] = vid;
 
           final ladaStr = cLada >= 0 ? _cell(r[cLada]).trim() : "";
@@ -267,10 +267,11 @@ class _CargarTabState extends State<CargarTab> {
             "producto": prod,
             "compania": compDetectadaCli,
             "estado": "en_cliente",
-            "vendedor": vendNombre,
-            "cliente": cliNombre,
-            "fecha_asig_cliente": cFecha >= 0 ? _fechaIso(_cell(r[cFecha])) : "",
+            "_vnom": vendNombre,
+            "_cnom": cliNombre,
           };
+          final fechaCli = cFecha >= 0 ? _fechaIso(_cell(r[cFecha])) : "";
+          if (fechaCli.isNotEmpty) fila["fecha_asig_cliente"] = fechaCli;
           if (vid.isNotEmpty) fila["vendedor_id"] = vid;
           if (cid.isNotEmpty) fila["cliente_id"] = cid;
 
@@ -309,9 +310,10 @@ class _CargarTabState extends State<CargarTab> {
       final faltantes = <String, String>{}; // nombre -> ID
       for (final r in registros) {
         if ((r["vendedor_id"] ?? "").toString().isEmpty) {
-          final v = (r["vendedor"] ?? "").toString();
+          // Para chips guardamos el nombre en clave auxiliar _vnom para este bloque
+          final v = (r["_vnom"] ?? "").toString();
           if (v.isNotEmpty) {
-            final genId = "VEND-${v.hashCode.abs()}-${DateTime.now().millisecond}";
+            final genId = "VEND-${v.hashCode.abs()}";
             faltantes.putIfAbsent(v, () => genId);
             r["vendedor_id"] = faltantes[v];
           }
@@ -336,9 +338,9 @@ class _CargarTabState extends State<CargarTab> {
       final faltantesCli = <String, String>{};
       for (final r in registros) {
         if ((r["cliente_id"] ?? "").toString().isEmpty) {
-          final c = (r["cliente"] ?? "").toString();
+          final c = (r["_cnom"] ?? "").toString();
           if (c.isNotEmpty) {
-            final genId = "CLI-${c.hashCode.abs()}-${DateTime.now().millisecond}";
+            final genId = "CLI-${c.hashCode.abs()}";
             faltantesCli.putIfAbsent(c, () => genId);
             r["cliente_id"] = faltantesCli[c];
           }
@@ -354,6 +356,12 @@ class _CargarTabState extends State<CargarTab> {
         try {
            await Supabase.instance.client.from('clientes').upsert(loteCli);
         } catch (_) {}
+      }
+
+      // Quitar claves auxiliares antes de enviar a la BD
+      for (final r in registros) {
+        r.remove("_vnom");
+        r.remove("_cnom");
       }
 
       final sinId = registros.where((r) =>
