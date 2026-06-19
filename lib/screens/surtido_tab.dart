@@ -39,6 +39,13 @@ class _SurtidoTabState extends State<SurtidoTab> {
   bool _sortAsc = false;
   String? _highlightedCliente;
 
+  final ScrollController _vCtrlPedido = ScrollController();
+  final ScrollController _hCtrlPedido = ScrollController();
+  final ScrollController _vCtrlMax = ScrollController();
+  final ScrollController _hCtrlMax = ScrollController();
+  final ScrollController _vCtrlInv = ScrollController();
+  final ScrollController _hCtrlInv = ScrollController();
+
   static const _companias5 = ["AT&T", "Unefon", "Movistar", "Telcel", "Bait"];
 
   bool _matchCompania(String dbComp, Set<String> sel) {
@@ -58,6 +65,17 @@ class _SurtidoTabState extends State<SurtidoTab> {
   void initState() {
     super.initState();
     _cargar();
+  }
+
+  @override
+  void dispose() {
+    _vCtrlPedido.dispose();
+    _hCtrlPedido.dispose();
+    _vCtrlMax.dispose();
+    _hCtrlMax.dispose();
+    _vCtrlInv.dispose();
+    _hCtrlInv.dispose();
+    super.dispose();
   }
 
   Future<void> _cargar() async {
@@ -700,12 +718,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
         height: 280,
         child: Scrollbar(
           thumbVisibility: true,
+          controller: _vCtrlPedido,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
+            controller: _vCtrlPedido,
             child: Scrollbar(
               thumbVisibility: true,
+              controller: _hCtrlPedido,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
+                controller: _hCtrlPedido,
                 child: Table(
           columnWidths: colWidths,
         border: TableBorder.all(color: Colors.grey.shade300),
@@ -855,12 +877,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
         height: 280,
         child: Scrollbar(
           thumbVisibility: true,
+          controller: _vCtrlMax,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
+            controller: _vCtrlMax,
             child: Scrollbar(
               thumbVisibility: true,
+              controller: _hCtrlMax,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
+                controller: _hCtrlMax,
                 child: Table(
           columnWidths: colWidths,
         border: TableBorder.all(color: Colors.grey.shade300),
@@ -964,12 +990,16 @@ class _SurtidoTabState extends State<SurtidoTab> {
         height: 380,
         child: Scrollbar(
           thumbVisibility: true,
+          controller: _vCtrlInv,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
+            controller: _vCtrlInv,
             child: Scrollbar(
               thumbVisibility: true,
+              controller: _hCtrlInv,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
+                controller: _hCtrlInv,
                 child: Table(
           columnWidths: colWidths,
         border: TableBorder.all(color: Colors.grey.shade300),

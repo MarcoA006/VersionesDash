@@ -14,6 +14,8 @@ class ClientesTab extends StatefulWidget {
 class _ClientesTabState extends State<ClientesTab> {
   final _filtroCtrl = TextEditingController();
   String _q = "";
+  String? _filtroVendedorId;
+  String? _filtroRutaId;
 
   @override
   void dispose() {
@@ -24,9 +26,13 @@ class _ClientesTabState extends State<ClientesTab> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AdminState>();
-    final lista = state.clientes
-        .where((c) => c.nombre.toLowerCase().contains(_q))
-        .toList();
+    final lista = state.clientes.where((c) {
+      if (!c.nombre.toLowerCase().contains(_q)) return false;
+      if (_filtroVendedorId != null && c.vendedorId != _filtroVendedorId) return false;
+      if (_filtroRutaId != null && c.rutaId != _filtroRutaId) return false;
+      return true;
+    }).toList();
+    
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -51,11 +57,49 @@ class _ClientesTabState extends State<ClientesTab> {
             ],
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _filtroCtrl,
-            decoration: const InputDecoration(
-                labelText: "Buscar cliente", prefixIcon: Icon(Icons.search)),
-            onChanged: (v) => setState(() => _q = v.trim().toLowerCase()),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _filtroCtrl,
+                  decoration: const InputDecoration(
+                      labelText: "Buscar cliente", prefixIcon: Icon(Icons.search)),
+                  onChanged: (v) => setState(() => _q = v.trim().toLowerCase()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: "Vendedor"),
+                  value: _filtroVendedorId,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text("Todos")),
+                    ...state.vendedores.map((v) => DropdownMenuItem(value: v.id, child: Text(v.nombre))),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _filtroVendedorId = v;
+                    _filtroRutaId = null;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: "Ruta"),
+                  value: _filtroRutaId,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text("Todas")),
+                    ...state.rutas
+                        .where((r) => _filtroVendedorId == null || r.vendedorId == _filtroVendedorId)
+                        .map((r) => DropdownMenuItem(value: r.id, child: Text(r.nombre))),
+                  ],
+                  onChanged: (v) => setState(() => _filtroRutaId = v),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -138,7 +182,15 @@ class _ClientesTabState extends State<ClientesTab> {
                     const DropdownMenuItem(value: null, child: Text("Sin asignar")),
                     ...state.vendedores.map((v) => DropdownMenuItem(value: v.id, child: Text(v.nombre))),
                   ],
-                  onChanged: (x) => setLocal(() => vendedorId = x),
+                  onChanged: (x) => setLocal(() {
+                    vendedorId = x;
+                    if (rutaId != null) {
+                      final r = state.rutas.where((r) => r.id == rutaId).firstOrNull;
+                      if (r != null && r.vendedorId != vendedorId) {
+                        rutaId = null;
+                      }
+                    }
+                  }),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
@@ -147,7 +199,9 @@ class _ClientesTabState extends State<ClientesTab> {
                   decoration: const InputDecoration(labelText: "Asignar a ruta"),
                   items: [
                     const DropdownMenuItem(value: null, child: Text("Sin ruta")),
-                    ...state.rutas.map((r) => DropdownMenuItem(value: r.id, child: Text(r.nombre))),
+                    ...state.rutas
+                        .where((r) => vendedorId == null || r.vendedorId == vendedorId)
+                        .map((r) => DropdownMenuItem(value: r.id, child: Text(r.nombre))),
                   ],
                   onChanged: (x) => setLocal(() => rutaId = x),
                 ),

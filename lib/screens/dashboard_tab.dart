@@ -377,16 +377,20 @@ class _DashboardTabState extends State<DashboardTab> {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      if (pctVendido != null)
-                        Text(
-                          "${pctVendido > 0 ? '+' : ''}${pctVendido.toStringAsFixed(1)}%",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: pctVendido > 0 ? AppColors.exito : (pctVendido < 0 ? AppColors.alerta : Colors.grey),
-                          ),
+                      Icon(
+                        pctVendido == null || pctVendido == 0 ? Icons.remove : (pctVendido > 0 ? Icons.arrow_upward : Icons.arrow_downward),
+                        color: pctVendido == null || pctVendido == 0 ? Colors.grey : (pctVendido > 0 ? AppColors.exito : AppColors.alerta),
+                        size: 14,
+                      ),
+                      Text(
+                        pctVendido == null ? " 0%" : " ${pctVendido.abs().toStringAsFixed(1)}%",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: pctVendido == null || pctVendido == 0 ? Colors.grey : (pctVendido > 0 ? AppColors.exito : AppColors.alerta),
                         ),
-                      if (pctVendido != null) const SizedBox(width: 4),
+                      ),
+                      const SizedBox(width: 4),
                       Text("$vendido",
                           style: const TextStyle(
                               fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.exito)),
