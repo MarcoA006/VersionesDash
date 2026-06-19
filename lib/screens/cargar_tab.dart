@@ -2,6 +2,7 @@ import 'package:excel/excel.dart' as xls;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../admin_state.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -264,6 +265,44 @@ class _CargarTabState extends State<CargarTab> {
       if (registros.isEmpty) {
         _fin("No se encontraron registros válidos para subir.");
         return;
+      }
+
+      // Deduplicar registros en base a ICCID para el archivo actual
+      final vistos = <String>{};
+      final dedup = <Map<String, dynamic>>[];
+      for (final r in registros) {
+        final icc = (r["iccid"] ?? "").toString();
+        if (icc.isEmpty || vistos.add(icc)) {
+          dedup.add(r);
+        }
+      }
+      registros = dedup;
+
+      // Crear vendedores faltantes en la BD
+      final faltantes = <String, String>{}; // nombre -> ID
+      for (final r in registros) {
+        if ((r["vendedor_id"] ?? "").toString().isEmpty) {
+          final v = (r["vendedor"] ?? "").toString();
+          if (v.isNotEmpty) {
+            final genId = "VEND-${v.hashCode.abs()}-${DateTime.now().millisecond}";
+            faltantes.putIfAbsent(v, () => genId);
+            r["vendedor_id"] = faltantes[v];
+          }
+        }
+      }
+
+      if (faltantes.isNotEmpty) {
+        setState(() => _log = "Creando ${faltantes.length} vendedores faltantes en la BD...");
+        final loteNuevos = faltantes.entries.map((e) => {
+          "vendedor_id": e.value,
+          "nombre": e.key,
+          "usuario": e.value,
+          "password_hash": "PENDIENTE",
+          "activo": true
+        }).toList();
+        try {
+           await Supabase.instance.client.from('vendedores').upsert(loteNuevos);
+        } catch (_) {}
       }
 
       final sinId = registros.where((r) =>

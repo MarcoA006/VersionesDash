@@ -192,13 +192,12 @@ class DashboardLogic {
     return m;
   }
 
-  /// Contador total por compañía desglosado por estado (en_cliente vs vendido).
   Map<String, Map<String, int>> totalesPorCompaniaYEstado(List<VentaHist> data) {
     final m = {for (final c in companias) c: {"en_cliente": 0, "vendido": 0}};
     for (final v in data) {
       final g = agrupa(v.compania);
+      if (!companias.contains(g)) continue;
       final estado = v.origen == 'venta' ? 'vendido' : 'en_cliente';
-      m[g] ??= {"en_cliente": 0, "vendido": 0};
       m[g]![estado] = (m[g]![estado] ?? 0) + 1;
     }
     return m;
@@ -216,10 +215,13 @@ class DashboardLogic {
     int enCliente = 0;
     int vendido = 0;
     for (final v in data) {
-      if (v.origen == 'venta') {
-        vendido++;
-      } else {
-        enCliente++;
+      final g = agrupa(v.compania);
+      if (g == "AT&T" || g == "UNEFON") {
+        if (v.origen == 'venta') {
+          vendido++;
+        } else {
+          enCliente++;
+        }
       }
     }
     return {"en_cliente": enCliente, "vendido": vendido};
