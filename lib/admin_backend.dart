@@ -239,14 +239,18 @@ class SupabaseAdminBackend implements AdminBackend {
       final dnVenta = (r['dn'] ?? '').toString().trim();
       final ladaCalculada = dnVenta.length >= 3 ? dnVenta.substring(0, 3) : '';
       
+      String prodDb = (r['producto'] ?? '').toString();
+      String compDb = (r['compania'] ?? '').toString();
+      if (compDb.isEmpty && iccVenta.isNotEmpty) {
+        compDb = compPorIccid[iccVenta] ?? '';
+      }
+
       out.add(VentaHist(
         fecha: f,
         vendedorId: vendedor,
         clienteId: clienteId,
         clienteNombre: nombrePorId[clienteId] ?? cnom,
-        compania: companiaDeProducto(
-            (r['producto'] ?? '').toString(),
-            carrier: (r['compania'] ?? '').toString()),
+        compania: companiaDeProducto(prodDb, carrier: compDb),
         lada: ladaCalculada.isNotEmpty ? ladaCalculada : (r['plaza'] ?? '').toString(),
         lat: _num(r['lat']),
         lng: _num(r['lng']),
